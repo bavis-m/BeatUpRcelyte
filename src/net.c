@@ -232,7 +232,7 @@ int32_t net_bind_tcp(uint16_t port, uint32_t backlog) {
 	#else
 	signal(SIGPIPE, SIG_IGN);
 	#endif
-	int32_t listenfd = socket(AF_INET6, SOCK_STREAM, 0);
+	int32_t listenfd = socket(net_useIPv4 ? AF_INET : AF_INET6, SOCK_STREAM, 0);
 	if(listenfd == -1) {
 		uprintf("Failed to open TCP socket: %s\n", net_strerror(net_error()));
 		#ifdef WINDOWS
@@ -241,14 +241,26 @@ int32_t net_bind_tcp(uint16_t port, uint32_t backlog) {
 		return -1;
 	}
 	setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, (char*)(int32_t[]){1}, sizeof(int32_t));
-	struct sockaddr_in6 addr = {
-		.sin6_family = AF_INET6,
-		.sin6_port = htons(port),
-		.sin6_flowinfo = 0,
-		.sin6_addr = IN6ADDR_ANY_INIT,
-		.sin6_scope_id = 0,
-	};
-	if(bind(listenfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+
+	struct SS addr;
+	if(net_useIPv4) {
+		addr.len = sizeof(struct sockaddr_in);
+		addr.in = (struct sockaddr_in){
+			.sin_family = AF_INET,
+			.sin_port = htons(port),
+			.sin_addr.s_addr = htonl(INADDR_ANY),
+		};
+	} else {
+		addr.len = sizeof(struct sockaddr_in6);
+		addr.in6 = (struct sockaddr_in6){
+			.sin6_family = AF_INET6,
+			.sin6_port = htons(port),
+			.sin6_flowinfo = 0,
+			.sin6_addr = IN6ADDR_ANY_INIT,
+			.sin6_scope_id = 0,
+		};
+	}
+	if(bind(listenfd, &addr.sa, addr.len) < 0) {
 		uprintf("Cannot bind socket to port %hu: %s\n", port, net_strerror(net_error()));
 		goto fail;
 	}
